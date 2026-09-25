@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -51,36 +52,24 @@ import com.bomeber.homestream.media.MediaAccessType
 private const val TAG = "HomeStreamDetect"
 
 /**
- * Step 2: real WebView browser (replaces the Step 1 placeholder).
- * Step 3 V2: adds a minimal "Detected Media" testing panel fed by
- * BrowserViewModel.detectedMedia — a hybrid of DOM detection and network
- * observation (see WebViewContainer). Shows each item's classification
- * AND which mechanism found it (DOM / NETWORK) — a description of how the
- * media presents itself, never a claim about whether it can be downloaded
- * (that's a later step's job).
- * Step 4: rows for a playable item (DIRECT_FILE or HLS — see [isPlayable])
- * now show a "Play" action that calls [onPlayMedia], which the NavHost
- * wires to navigate to PlayerScreen. Everything else about the panel is
- * unchanged from Step 3 — this is intentionally the smallest possible
- * touch to the existing testing UI.
- *
- * ASSUMPTION: called with no required args from HomeStreamNavHost, same as
- * the Step 1 placeholder. If your current call site passes extra params
- * (e.g. a NavController), keep them in the signature — nothing below needs one.
+ * Step 5: DetectedMediaRow now also shows a "ดาวน์โหลด" action for
+ * DIRECT_FILE items (see [isDownloadable]) that calls [onPlayMedia]'s new
+ * sibling [onPlayMedia]... i.e. [onDownloadMedia], wired by
+ * HomeStreamNavHost to DownloadsViewModel.onDownloadMedia. Play (Step 4)
+ * is completely unchanged — the two actions are independent per the
+ * "PLAY vs DOWNLOAD are separate flows" rule.
  */
 @Composable
 fun BrowserScreen(
     modifier: Modifier = Modifier,
     viewModel: BrowserViewModel = viewModel(),
-    onPlayMedia: (DetectedMedia) -> Unit = {}
+    onPlayMedia: (DetectedMedia) -> Unit = {},
+    onDownloadMedia: (DetectedMedia) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val detectedMedia by viewModel.detectedMedia.collectAsState()
     var mediaPanelExpanded by remember { mutableStateOf(false) }
 
-    // DEBUG (Step 3 troubleshooting pipeline stage "I" — did Compose
-    // actually receive the data): confirms the UI layer got an update,
-    // separate from whether ViewModel accepted/dropped it.
     LaunchedEffect(detectedMedia) {
         Log.d(TAG, "Compose UI: detectedMedia size=${detectedMedia.size}")
     }
@@ -103,17 +92,14 @@ fun BrowserScreen(
                 progress = { uiState.loadingProgress / 100f },
                 modifier = Modifier.fillMaxWidth()
             )
-            // ถ้า compile error ตรงบรรทัดนี้ (material3 เวอร์ชันเก่ากว่าที่รองรับ lambda overload)
-            // ให้เปลี่ยนเป็น: progress = uiState.loadingProgress / 100f  (ไม่ใช่ lambda)
         }
 
-        // Step 3: development/testing UI only — not the final Library/Downloader UI.
-        // Step 4: rows for playable items now expose a Play action.
         DetectedMediaPanel(
             items = detectedMedia,
             expanded = mediaPanelExpanded,
             onToggle = { mediaPanelExpanded = !mediaPanelExpanded },
-            onPlayMedia = onPlayMedia
+            onPlayMedia = onPlayMedia,
+            onDownloadMedia = onDownloadMedia
         )
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -186,34 +172,20 @@ private fun BrowserTopBar(
     }
 }
 
-/**
- * Step 4 — which [MediaAccessType]s PlayerScreen currently knows how to
- * play. BLOB_MSE, UNKNOWN, HLS_SEGMENT and DASH_SEGMENT stay detected and
- * visible in the panel (never removed — Step 3 rule), they're just not
- * offered a Play action yet. DASH is intentionally excluded here too: the
- * existing Media3 dependency set (media3-exoplayer/ui/common) does not
- * include the separate media3-exoplayer-dash artifact, and Step 4 rule #9
- * says not to add a DASH dependency without first flagging it — see
- * project.md.
- */
 private fun isPlayable(accessType: MediaAccessType): Boolean =
     accessType == MediaAccessType.DIRECT_FILE || accessType == MediaAccessType.HLS
 
-/**
- * Step 3 — minimal testing UI: a collapsible panel listing whatever media
- * has been detected on the currently loaded page (from either detection
- * source), with each item's classification and which mechanism found it.
- * Not the final Library/Downloader UI — that comes later.
- *
- * Deliberately never uses the word "Downloadable" — Detected != Downloadable,
- * especially for BLOB_MSE, DRM-protected, or authenticated resources.
- */
+/** Step 5 — only DIRECT_FILE is downloadable for now; HLS stays play-only (see project.md). */
+private fun isDownloadable(accessType: MediaAccessType): Boolean =
+    accessType == MediaAccessType.DIRECT_FILE
+
 @Composable
 private fun DetectedMediaPanel(
     items: List<DetectedMedia>,
     expanded: Boolean,
     onToggle: () -> Unit,
-    onPlayMedia: (DetectedMedia) -> Unit
+    onPlayMedia: (DetectedMedia) -> Unit,
+    onDownloadMedia: (DetectedMedia) -> Unit
 ) {
     Surface(tonalElevation = 1.dp) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -225,10 +197,7 @@ private fun DetectedMediaPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Detected Media (${items.size})",
-                    style = MaterialTheme.typography.labelLarge
-                )
+                Text(text = "Detected Media (${items.size})", style = MaterialTheme.typography.labelLarge)
                 Icon(
                     imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = if (expanded) "ย่อ" else "ขยาย"
@@ -244,7 +213,12 @@ private fun DetectedMediaPanel(
                 } else {
                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                         items.forEachIndexed { index, media ->
-                            DetectedMediaRow(index = index, media = media, onPlayMedia = onPlayMedia)
+                            DetectedMediaRow(
+                                index = index,
+                                media = media,
+                                onPlayMedia = onPlayMedia,
+                                onDownloadMedia = onDownloadMedia
+                            )
                         }
                     }
                 }
@@ -257,13 +231,10 @@ private fun DetectedMediaPanel(
 private fun DetectedMediaRow(
     index: Int,
     media: DetectedMedia,
-    onPlayMedia: (DetectedMedia) -> Unit
+    onPlayMedia: (DetectedMedia) -> Unit,
+    onDownloadMedia: (DetectedMedia) -> Unit
 ) {
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
-        // Matches the agreed format:
-        //   1. HLS
-        //      NETWORK
-        //      https://example.com/master.m3u8
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -273,52 +244,40 @@ private fun DetectedMediaRow(
                 text = "${index + 1}. ${accessTypeShortLabel(media.accessType)}",
                 style = MaterialTheme.typography.bodyMedium
             )
-            // Step 4 — Play action, only for access types PlayerScreen
-            // currently supports (see isPlayable). Everything else about
-            // this row (labels, MIME, metadata) is unchanged from Step 3.
-            if (isPlayable(media.accessType)) {
-                TextButton(onClick = { onPlayMedia(media) }) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text("เล่น")
+            Row {
+                if (isPlayable(media.accessType)) {
+                    TextButton(onClick = { onPlayMedia(media) }) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("เล่น")
+                    }
+                }
+                if (isDownloadable(media.accessType)) {
+                    TextButton(onClick = { onDownloadMedia(media) }) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("ดาวน์โหลด")
+                    }
                 }
             }
         }
-        Text(
-            text = media.detectionSource.name,
-            style = MaterialTheme.typography.bodySmall
-        )
-        Text(
-            text = media.url,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1
-        )
+        Text(text = media.detectionSource.name, style = MaterialTheme.typography.bodySmall)
+        Text(text = media.url, style = MaterialTheme.typography.bodySmall, maxLines = 1)
         media.title?.takeIf { it.isNotBlank() }?.let { title ->
             Text(text = title, style = MaterialTheme.typography.bodySmall)
         }
         val durationText = formatDuration(media.metadata.durationSeconds)
         val resolutionText = if (media.metadata.width != null && media.metadata.height != null) {
             "${media.metadata.width}×${media.metadata.height}"
-        } else {
-            null
-        }
+        } else null
         if (durationText != null || resolutionText != null) {
             Text(
                 text = listOfNotNull(durationText, resolutionText).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        Text(
-            text = "MIME: ${media.mimeType ?: "ไม่ทราบ"}",
-            style = MaterialTheme.typography.bodySmall
-        )
+        Text(text = "MIME: ${media.mimeType ?: "ไม่ทราบ"}", style = MaterialTheme.typography.bodySmall)
     }
 }
 
-/** Short classification label, matching the agreed UI format exactly. */
 private fun accessTypeShortLabel(type: MediaAccessType): String = when (type) {
     MediaAccessType.DIRECT_FILE -> "DIRECT FILE"
     MediaAccessType.HLS -> "HLS"
@@ -335,11 +294,7 @@ private fun formatDuration(seconds: Double?): String? {
     val h = total / 3600
     val m = (total % 3600) / 60
     val s = total % 60
-    return if (h > 0) {
-        "%d:%02d:%02d".format(h, m, s)
-    } else {
-        "%d:%02d".format(m, s)
-    }
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
 @Composable

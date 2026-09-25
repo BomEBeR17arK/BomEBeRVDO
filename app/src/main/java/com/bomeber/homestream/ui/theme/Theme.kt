@@ -24,6 +24,10 @@ private val LightColorScheme = lightColorScheme(
     tertiary = Pink40
 )
 
+/**
+ * dynamicColor = true (default) -> ใช้ Material You (Android 12+)
+ * ตั้งเป็น false ถ้าอยากคุมสีเองล้วนๆ ไม่ต้องพึ่ง wallpaper ของเครื่อง
+ */
 @Composable
 fun HomeStreamTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

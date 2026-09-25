@@ -14,6 +14,10 @@ import androidx.compose.ui.unit.dp
 import com.bomeber.homestream.ui.model.LibraryVideoItem
 import com.bomeber.homestream.ui.model.SampleData
 
+/**
+ * GridCells.Adaptive ทำให้จำนวนคอลัมน์ปรับเองอัตโนมัติ
+ * มือถือจอแคบ = 2 คอลัมน์, tablet จอกว้าง = 4-5 คอลัมน์ ไม่ต้องเช็ค screen size เอง
+ */
 @Composable
 fun LibraryScreen() {
     Column(
