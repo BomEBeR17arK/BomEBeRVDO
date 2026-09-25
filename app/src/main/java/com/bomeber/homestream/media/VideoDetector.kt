@@ -29,25 +29,6 @@ object VideoDetector {
     /** Name of the JavaScript interface installed on the WebView. */
     const val JS_INTERFACE_NAME = "HomeStreamMedia"
 
-    /**
-     * Injected once per page load via evaluateJavascript() on onPageFinished.
-     * Idempotent — if already installed on this page, it just re-runs the
-     * scan instead of re-registering the observer.
-     *
-     * Installs:
-     *  1. `window.__homestreamScan()` — one full-DOM pass over <video> and
-     *     <audio> elements, their <source> children, and a small set of
-     *     common data-* attributes on the element itself, each resolved to
-     *     an absolute URL, classified, and de-duplicated.
-     *  2. A MutationObserver on the whole document that re-runs the scan
-     *     (debounced 400ms) whenever the DOM changes, reporting the result
-     *     back via the `HomeStreamMedia` JavaScript interface.
-     *
-     * The whole body is wrapped in try/catch, reporting any unexpected JS
-     * exception via console.error (forwarded to Logcat by
-     * WebViewContainer's onConsoleMessage) instead of silently returning
-     * nothing.
-     */
     val DETECTION_SCRIPT: String = """
         (function() {
           try {
@@ -56,9 +37,6 @@ object VideoDetector {
             }
             window.__homestreamInstalled = true;
 
-            // Mirrors MediaUrlClassifier.classify() in Kotlin — keep both
-            // in sync. Decided purely from the URL string and MIME type
-            // already exposed by the page — never by fetching anything.
             function classifyAccessType(url, mime) {
               if (/^blob:/i.test(url)) return 'BLOB_MSE';
               if (!/^https?:\/\//i.test(url)) return null;
@@ -123,11 +101,6 @@ object VideoDetector {
                   push(sources[j].getAttribute('src'), sources[j].getAttribute('type'), kind, elTitle, meta);
                 }
 
-                // Common data-* attributes some players/sites expose on the
-                // media element itself as an alternate/original source
-                // reference. Still just reading an attribute the page
-                // already put on this same element — no network access, no
-                // reaching into other elements or frames.
                 var dataAttrs = ['data-src', 'data-hls-src', 'data-dash-src', 'data-manifest', 'data-video-src'];
                 for (var k = 0; k < dataAttrs.length; k++) {
                   var val = el.getAttribute(dataAttrs[k]);
@@ -164,15 +137,6 @@ object VideoDetector {
         })();
     """.trimIndent()
 
-    /**
-     * TEMP DEBUG (from the HD432 troubleshooting session) — read-only
-     * counts to distinguish "player is in an iframe" from "player uses
-     * blob:/MediaSource". Does not read into any iframe's document, does
-     * not follow/extract the blob: URL. Kept for now — network observation
-     * (this session) is the actual fix attempt for the iframe case; this
-     * diagnostic still helps confirm whether it worked. Safe to delete
-     * later.
-     */
     val DIAGNOSTIC_SCRIPT: String = """
         (function() {
           try {
@@ -196,15 +160,6 @@ object VideoDetector {
         })();
     """.trimIndent()
 
-    /**
-     * Parses the JSON array produced by [DETECTION_SCRIPT] — either the raw
-     * evaluateJavascript() result, or the JSON.stringify'd payload passed
-     * through the JavaScript interface — into [DetectedMedia], tagging every
-     * item with the page it came from and [MediaDetectionSource.DOM] (this
-     * function is only ever called for the DOM detection path). Parse
-     * failures are logged (not silently swallowed) so they're
-     * distinguishable from a legitimate empty scan.
-     */
     fun parse(json: String?, pageUrl: String): List<DetectedMedia> {
         if (json.isNullOrBlank() || json == "null") return emptyList()
         return try {
@@ -259,13 +214,6 @@ object VideoDetector {
         if (has(name) && !isNull(name)) optInt(name) else null
 }
 
-/**
- * Bridges MutationObserver-driven rescans (media that appears after the
- * initial page load) back into Kotlin. Injected as `HomeStreamMedia` on the
- * WebView. The only thing this ever receives is a JSON string produced by
- * [VideoDetector]'s own injected script — it is not used to read from or
- * act on the page in any other way.
- */
 class MediaDetectionJsBridge(
     private val onResult: (json: String) -> Unit
 ) {

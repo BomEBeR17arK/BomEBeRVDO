@@ -61,6 +61,18 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
     implementation(libs.media3.common)
+    // Step 4 — REQUIRED NEW DEPENDENCY: HLS playback (MediaAccessType.HLS)
+    // needs the separate media3-exoplayer-hls artifact; it is NOT bundled
+    // inside media3-exoplayer. Without it, DefaultMediaSourceFactory cannot
+    // resolve an HlsMediaSource and HLS items will surface as a playback
+    // error instead of a crash, but will never actually play.
+    // ACTION NEEDED: add the matching alias to gradle/libs.versions.toml,
+    // using the SAME version as the existing "media3" entries, e.g.:
+    //   media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exoplayer-hls", version.ref = "media3" }
+    // This repo's libs.versions.toml was not part of what was shared in
+    // this session, so the exact version ref name could not be confirmed —
+    // adjust the alias below if your catalog names it differently.
+    implementation(libs.media3.exoplayer.hls)
 
     implementation(libs.coil.compose)
 }

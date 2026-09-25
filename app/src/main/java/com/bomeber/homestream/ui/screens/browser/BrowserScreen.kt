@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -30,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,6 +58,11 @@ private const val TAG = "HomeStreamDetect"
  * AND which mechanism found it (DOM / NETWORK) — a description of how the
  * media presents itself, never a claim about whether it can be downloaded
  * (that's a later step's job).
+ * Step 4: rows for a playable item (DIRECT_FILE or HLS — see [isPlayable])
+ * now show a "Play" action that calls [onPlayMedia], which the NavHost
+ * wires to navigate to PlayerScreen. Everything else about the panel is
+ * unchanged from Step 3 — this is intentionally the smallest possible
+ * touch to the existing testing UI.
  *
  * ASSUMPTION: called with no required args from HomeStreamNavHost, same as
  * the Step 1 placeholder. If your current call site passes extra params
@@ -64,7 +71,8 @@ private const val TAG = "HomeStreamDetect"
 @Composable
 fun BrowserScreen(
     modifier: Modifier = Modifier,
-    viewModel: BrowserViewModel = viewModel()
+    viewModel: BrowserViewModel = viewModel(),
+    onPlayMedia: (DetectedMedia) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val detectedMedia by viewModel.detectedMedia.collectAsState()
@@ -100,10 +108,12 @@ fun BrowserScreen(
         }
 
         // Step 3: development/testing UI only — not the final Library/Downloader UI.
+        // Step 4: rows for playable items now expose a Play action.
         DetectedMediaPanel(
             items = detectedMedia,
             expanded = mediaPanelExpanded,
-            onToggle = { mediaPanelExpanded = !mediaPanelExpanded }
+            onToggle = { mediaPanelExpanded = !mediaPanelExpanded },
+            onPlayMedia = onPlayMedia
         )
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -177,6 +187,19 @@ private fun BrowserTopBar(
 }
 
 /**
+ * Step 4 — which [MediaAccessType]s PlayerScreen currently knows how to
+ * play. BLOB_MSE, UNKNOWN, HLS_SEGMENT and DASH_SEGMENT stay detected and
+ * visible in the panel (never removed — Step 3 rule), they're just not
+ * offered a Play action yet. DASH is intentionally excluded here too: the
+ * existing Media3 dependency set (media3-exoplayer/ui/common) does not
+ * include the separate media3-exoplayer-dash artifact, and Step 4 rule #9
+ * says not to add a DASH dependency without first flagging it — see
+ * project.md.
+ */
+private fun isPlayable(accessType: MediaAccessType): Boolean =
+    accessType == MediaAccessType.DIRECT_FILE || accessType == MediaAccessType.HLS
+
+/**
  * Step 3 — minimal testing UI: a collapsible panel listing whatever media
  * has been detected on the currently loaded page (from either detection
  * source), with each item's classification and which mechanism found it.
@@ -189,7 +212,8 @@ private fun BrowserTopBar(
 private fun DetectedMediaPanel(
     items: List<DetectedMedia>,
     expanded: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    onPlayMedia: (DetectedMedia) -> Unit
 ) {
     Surface(tonalElevation = 1.dp) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -220,7 +244,7 @@ private fun DetectedMediaPanel(
                 } else {
                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                         items.forEachIndexed { index, media ->
-                            DetectedMediaRow(index = index, media = media)
+                            DetectedMediaRow(index = index, media = media, onPlayMedia = onPlayMedia)
                         }
                     }
                 }
@@ -230,16 +254,39 @@ private fun DetectedMediaPanel(
 }
 
 @Composable
-private fun DetectedMediaRow(index: Int, media: DetectedMedia) {
+private fun DetectedMediaRow(
+    index: Int,
+    media: DetectedMedia,
+    onPlayMedia: (DetectedMedia) -> Unit
+) {
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
         // Matches the agreed format:
         //   1. HLS
         //      NETWORK
         //      https://example.com/master.m3u8
-        Text(
-            text = "${index + 1}. ${accessTypeShortLabel(media.accessType)}",
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${index + 1}. ${accessTypeShortLabel(media.accessType)}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            // Step 4 — Play action, only for access types PlayerScreen
+            // currently supports (see isPlayable). Everything else about
+            // this row (labels, MIME, metadata) is unchanged from Step 3.
+            if (isPlayable(media.accessType)) {
+                TextButton(onClick = { onPlayMedia(media) }) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text("เล่น")
+                }
+            }
+        }
         Text(
             text = media.detectionSource.name,
             style = MaterialTheme.typography.bodySmall
