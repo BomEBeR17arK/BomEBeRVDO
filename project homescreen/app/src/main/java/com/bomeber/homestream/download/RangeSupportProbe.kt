@@ -25,8 +25,6 @@ object RangeSupportProbe {
         head.disconnect()
 
         when {
-            acceptRanges?.equals("bytes", ignoreCase = true) == true && length > 0 ->
-                ProbeResult(true, length)
             length > 0 -> confirmWithRangeRequest(urlString, length)
             else -> ProbeResult(false, -1)
         }
@@ -41,7 +39,8 @@ object RangeSupportProbe {
             connectTimeout = 15_000
             readTimeout = 15_000
         }
-        val supports = conn.responseCode == HttpURLConnection.HTTP_PARTIAL
+        val supports = conn.responseCode == HttpURLConnection.HTTP_PARTIAL &&
+            conn.getHeaderField("Content-Range")?.startsWith("bytes 0-0/") == true
         conn.disconnect()
         ProbeResult(supports, knownLength)
     } catch (e: Exception) {

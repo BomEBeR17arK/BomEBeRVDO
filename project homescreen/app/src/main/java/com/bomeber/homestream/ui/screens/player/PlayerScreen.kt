@@ -33,6 +33,8 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.bomeber.homestream.download.HlsOffline
 import androidx.media3.ui.PlayerView
 import com.bomeber.homestream.media.MediaAccessType
 
@@ -68,7 +70,12 @@ fun PlayerScreen(
 
     val exoPlayer = remember(mediaUrl) {
         runCatching {
-            ExoPlayer.Builder(context).build().apply {
+            val builder = ExoPlayer.Builder(context)
+            if (accessType == "HLS_OFFLINE") {
+                builder.setMediaSourceFactory(DefaultMediaSourceFactory(context)
+                    .setDataSourceFactory(HlsOffline.offlineDataSource(context)))
+            }
+            builder.build().apply {
                 val mediaItem = MediaItem.Builder()
                     .setUri(mediaUrl)
                     .apply {
@@ -77,7 +84,7 @@ fun PlayerScreen(
                         // be missing/obscured behind query params on some
                         // sites). DIRECT_FILE is left to normal extension-based
                         // resolution, matching how Step 3 classifies it.
-                        if (accessType == MediaAccessType.HLS.name) {
+                        if (accessType == MediaAccessType.HLS.name || accessType == "HLS_OFFLINE") {
                             setMimeType(MimeTypes.APPLICATION_M3U8)
                         }
                     }

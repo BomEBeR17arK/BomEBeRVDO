@@ -25,7 +25,7 @@ import kotlin.math.roundToInt
 @Composable
 fun DownloadsScreen(
     viewModel: DownloadsViewModel = viewModel(),
-    onPlayLocal: (String) -> Unit = {}
+    onPlayLocal: (DownloadEntity) -> Unit = {}
 ) {
     val downloads by viewModel.downloads.collectAsState()
 
@@ -47,7 +47,7 @@ fun DownloadsScreen(
                         onCancel = { viewModel.cancel(item.id) },
                         onRetry = { viewModel.retry(item.id) },
                         onRemove = { viewModel.remove(item.id) },
-                        onPlay = { item.localFilePath?.let { onPlayLocal(it) } }
+                        onPlay = { if (item.localFilePath != null) onPlayLocal(item) }
                     )
                 }
             }
@@ -74,6 +74,10 @@ private fun DownloadCard(
             ) {
                 Text(item.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 AssistChip(onClick = {}, label = { Text(stateLabel(item.state)) })
+            }
+            item.selectedQualityLabel?.let { label ->
+                Text(label, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.height(8.dp))
 

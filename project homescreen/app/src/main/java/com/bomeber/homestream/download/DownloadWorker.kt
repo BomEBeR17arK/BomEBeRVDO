@@ -32,8 +32,7 @@ class DownloadWorker(appContext: Context, params: WorkerParameters) : CoroutineW
             when (entity.type) {
                 DownloadType.DIRECT_FILE ->
                     DirectFileDownloadEngine(applicationContext, dao).run(entity, maxConnections) { isStopped }
-                DownloadType.HLS ->
-                    HlsDownloadEngine(applicationContext, dao).run(entity, maxConnections) { isStopped }
+                DownloadType.HLS -> throw IllegalStateException("HLS uses Media3 DownloadService")
             }
             Result.success()
         } catch (e: CancellationException) {

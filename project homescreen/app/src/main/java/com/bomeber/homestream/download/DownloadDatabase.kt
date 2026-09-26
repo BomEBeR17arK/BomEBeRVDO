@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 
 @Database(
     entities = [DownloadEntity::class, DownloadUnitEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(DownloadConverters::class)
@@ -24,7 +24,17 @@ abstract class DownloadDatabase : RoomDatabase() {
                     context.applicationContext,
                     DownloadDatabase::class.java,
                     "homestream_downloads.db"
-                ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2).build().also { INSTANCE = it }
             }
+
+        private val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE downloads ADD COLUMN selectedVariantUrl TEXT")
+                db.execSQL("ALTER TABLE downloads ADD COLUMN selectedQualityLabel TEXT")
+                db.execSQL("ALTER TABLE downloads ADD COLUMN selectedWidth INTEGER")
+                db.execSQL("ALTER TABLE downloads ADD COLUMN selectedHeight INTEGER")
+                db.execSQL("ALTER TABLE downloads ADD COLUMN selectedBandwidth INTEGER")
+            }
+        }
     }
 }
