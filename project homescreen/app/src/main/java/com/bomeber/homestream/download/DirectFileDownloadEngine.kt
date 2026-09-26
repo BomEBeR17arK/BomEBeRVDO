@@ -119,6 +119,11 @@ class DirectFileDownloadEngine(
                     }
                 }
                 conn.connect()
+                if (unit.rangeStart != null && unitsAreParallel(entity.id) &&
+                    conn.responseCode != HttpURLConnection.HTTP_PARTIAL) {
+                    conn.disconnect()
+                    throw IllegalStateException("เซิร์ฟเวอร์ไม่รองรับการดาวน์โหลดหลายช่วง")
+                }
                 var lastPersist = 0L
                 RandomAccessFile(destFile, "rw").use { raf ->
                     raf.seek(unit.rangeStart ?: 0)
@@ -152,4 +157,6 @@ class DirectFileDownloadEngine(
         }
         throw lastError ?: IllegalStateException("ดาวน์โหลดล้มเหลว: unit ${unit.unitIndex}")
     }
+
+    private suspend fun unitsAreParallel(id: String): Boolean = dao.getUnits(id).size > 1
 }

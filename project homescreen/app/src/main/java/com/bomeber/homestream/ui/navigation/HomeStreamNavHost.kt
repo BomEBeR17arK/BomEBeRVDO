@@ -11,6 +11,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.bomeber.homestream.HomeStreamApplication
+import com.bomeber.homestream.download.DownloadType
 import com.bomeber.homestream.media.DetectedMedia
 import com.bomeber.homestream.media.MediaAccessType
 import com.bomeber.homestream.ui.screens.browser.BrowserScreen
@@ -46,8 +47,8 @@ fun HomeStreamNavHost(
                 },
                 // Step 5.1 — kicks off DownloadRepository via Room + WorkManager;
                 // progress is observed on the Downloads tab, not here.
-                onDownloadMedia = { media: DetectedMedia ->
-                    downloadRepository.startDownload(media)
+                onDownloadMedia = { media: DetectedMedia, variant ->
+                    downloadRepository.startDownload(media, variant)
                 }
             )
         }
@@ -55,11 +56,11 @@ fun HomeStreamNavHost(
             DownloadsScreen(
                 // Step 5.1 — reuses Step 4's PlayerScreen for offline playback of a
                 // completed download: local file, same DIRECT_FILE access type.
-                onPlayLocal = { localPath ->
+                onPlayLocal = { item ->
                     navController.navigate(
                         Screen.Player.createRoute(
-                            mediaUrl = "file://$localPath",
-                            accessType = MediaAccessType.DIRECT_FILE.name
+                            mediaUrl = if (item.type == DownloadType.HLS && item.localFilePath!!.startsWith("http")) item.localFilePath else "file://${item.localFilePath}",
+                            accessType = if (item.type == DownloadType.HLS && item.localFilePath!!.startsWith("http")) "HLS_OFFLINE" else MediaAccessType.DIRECT_FILE.name
                         )
                     )
                 }

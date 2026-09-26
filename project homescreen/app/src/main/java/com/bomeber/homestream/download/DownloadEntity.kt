@@ -25,6 +25,11 @@ data class DownloadEntity(
     val localFilePath: String? = null,
     val errorMessage: String? = null,
     val retryCount: Int = 0,
+    val selectedVariantUrl: String? = null,
+    val selectedQualityLabel: String? = null,
+    val selectedWidth: Int? = null,
+    val selectedHeight: Int? = null,
+    val selectedBandwidth: Long? = null,
     val createdAt: Long = System.currentTimeMillis()
 )
 

@@ -25,6 +25,15 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.bomeber.homestream.HomeStreamApplication
+import com.bomeber.homestream.download.HlsPlaylistParser
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -62,14 +71,65 @@ fun BrowserScreen(
     modifier: Modifier = Modifier,
     viewModel: BrowserViewModel = viewModel(),
     onPlayMedia: (DetectedMedia) -> Unit = {},
-    onDownloadMedia: (DetectedMedia) -> Unit = {}
+    onDownloadMedia: (DetectedMedia, HlsPlaylistParser.Variant?) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val detectedMedia by viewModel.detectedMedia.collectAsState()
     var mediaPanelExpanded by remember { mutableStateOf(false) }
+    val repository = (LocalContext.current.applicationContext as HomeStreamApplication).downloadRepository
+    val scope = rememberCoroutineScope()
+    var qualityMedia by remember { mutableStateOf<DetectedMedia?>(null) }
+    var variants by remember { mutableStateOf<List<HlsPlaylistParser.Variant>>(emptyList()) }
+    var loadingQuality by remember { mutableStateOf(false) }
+    var qualityError by remember { mutableStateOf<String?>(null) }
+    val requestDownload: (DetectedMedia) -> Unit = { media ->
+        if (media.accessType == MediaAccessType.HLS) {
+            loadingQuality = true
+            scope.launch {
+                try {
+                    val found = repository.getAvailableQualities(media.url)
+                    if (found.isEmpty()) onDownloadMedia(media, null)
+                    else { variants = found; qualityMedia = media }
+                } catch (e: Exception) {
+                    qualityError = e.message ?: "อ่านรายการคุณภาพไม่สำเร็จ"
+                } finally { loadingQuality = false }
+            }
+        } else onDownloadMedia(media, null)
+    }
 
     LaunchedEffect(detectedMedia) {
         Log.d(TAG, "Compose UI: detectedMedia size=${detectedMedia.size}")
+    }
+
+    if (loadingQuality) androidx.compose.material3.AlertDialog(
+        onDismissRequest = {}, title = { Text("กำลังตรวจสอบคุณภาพ") },
+        text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp)); Text("อ่าน HLS playlist…")
+        } }, confirmButton = {}
+    )
+    qualityError?.let { message -> androidx.compose.material3.AlertDialog(
+        onDismissRequest = { qualityError = null }, title = { Text("ดาวน์โหลดไม่ได้") },
+        text = { Text(message) }, confirmButton = { TextButton(onClick = { qualityError = null }) { Text("ตกลง") } }
+    ) }
+    qualityMedia?.let { media ->
+        ModalBottomSheet(onDismissRequest = { qualityMedia = null }) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("เลือกคุณภาพวิดีโอ", style = MaterialTheme.typography.headlineSmall)
+                Text("ดาวน์โหลดเฉพาะคุณภาพที่เลือก", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                variants.forEach { variant ->
+                    ElevatedCard(onClick = { onDownloadMedia(media, variant); qualityMedia = null },
+                        modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(variant.displayLabel(), style = MaterialTheme.typography.titleMedium)
+                            Icon(Icons.Default.CloudDownload, contentDescription = "ดาวน์โหลด ${variant.displayLabel()}")
+                        }
+                    }
+                }
+                TextButton(onClick = { qualityMedia = null }, modifier = Modifier.align(Alignment.End)) { Text("ยกเลิก") }
+            }
+        }
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -97,7 +157,7 @@ fun BrowserScreen(
             expanded = mediaPanelExpanded,
             onToggle = { mediaPanelExpanded = !mediaPanelExpanded },
             onPlayMedia = onPlayMedia,
-            onDownloadMedia = onDownloadMedia
+            onDownloadMedia = requestDownload
         )
 
         Box(modifier = Modifier.fillMaxSize()) {
